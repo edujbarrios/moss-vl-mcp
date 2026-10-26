@@ -1,8 +1,8 @@
 """Configuration is read once at server startup; no global mutable settings."""
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
-import os
 
 
 @dataclass(frozen=True)

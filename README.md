@@ -109,7 +109,7 @@ codex mcp add moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
 1. `start_visual_session(prompt="Watch for UI changes")` → returns `session_id`.
 2. `push_visual_frame(session_id, path="frames/001.jpg", timestamp=0.0)` → repeat with increasing timestamps; a separate capture process can produce the frames.
 3. `ask_visual_session(session_id, prompt="What changed?")` → queues the follow-up question.
-4. `get_visual_events(session_id, after_seq=0)` → read output and remember `latest_seq` to avoid duplicates.
+4. `get_visual_events(session_id, after_seq=0)` → read output and remember `next_seq` to page through the event log without skipping messages.
 5. `stop_visual_session(session_id)` → frees the model connection.
 
 **Scope:** The MCP does not yet include continuous local camera/screen capture, browser hooks, proactive MCP notifications, or SGLang-Omni integration. These are roadmap items, not implemented features.

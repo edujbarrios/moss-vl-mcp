@@ -77,25 +77,72 @@ export MOSS_VL_CHECKPOINT="OpenMOSS-Team/MOSS-VL-Instruct-0708"
 moss-vl-mcp
 ```
 
-### Claude Code
+## Use MOSS-VL inside Claude Code or Codex
+
+**The agent remains Claude or Codex. MOSS-VL runs as a visual-perception backend accessed through MCP tools.** Installing the MCP does not download model weights or start GPU inference.
+
+For a complete hands-on walkthrough (including model prerequisites, recorded-video workflows, visual QA, realtime observation, monitoring prompts, troubleshooting, and permissions), see **[Agent Usage Guide](docs/AGENT_USAGE.md)**.
+
+### 1. Add the MCP to Claude Code
+
+Clone and install this repository locally, then point Claude at the virtualenv executable. **Replace all example absolute paths**:
 
 ```bash
-claude mcp add moss-vl -- uvx --from moss-vl-mcp moss-vl-mcp
+claude mcp add --transport stdio --scope user \
+  --env MOSS_VL_MEDIA_ROOT=/absolute/path/to/media \
+  --env MOSS_VL_REALTIME_URL=ws://127.0.0.1:8000/v1/realtime \
+  moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
+
+claude mcp list
 ```
 
-For a local source checkout without a published package:
+Launch Claude Code and use `/mcp` to verify that `moss-vl` is connected. Offline tools require the MOSS-VL-Instruct model to be available in the MCP's environment. Realtime tools require the official reference MOSS-VL-Realtime WebSocket service to be running. You can pass `--env MOSS_VL_CHECKPOINT=/absolute/path/to/checkpoint` when registering if needed.
+
+### 2. Add the MCP to OpenAI Codex
 
 ```bash
-claude mcp add moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
+codex mcp add moss-vl \
+  --env MOSS_VL_MEDIA_ROOT=/absolute/path/to/media \
+  --env MOSS_VL_REALTIME_URL=ws://127.0.0.1:8000/v1/realtime \
+  -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
+
+codex mcp list
 ```
 
-### OpenAI Codex
+Restart Codex after configuring the MCP. Codex CLI and its IDE integration share MCP configuration. Alternatively, use `~/.codex/config.toml` as shown in the [Agent Usage Guide](docs/AGENT_USAGE.md).
 
-```bash
-codex mcp add moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
+**The package is not published to PyPI yet.** Do not use `uvx --from moss-vl-mcp` until a release is actually published. Use your local checkout.
+
+### 3. Ask the agent to use the visual tools
+
+Once connected, give Claude Code or Codex prompts like these:
+
+**Analyze a screenshot (offline inference):**
+
+> Use the `moss-vl` MCP `analyze_image` tool to inspect `/absolute/path/to/media/checkout.png`. Explain the visible UI state and flag any suspected error, separating evidence from assumptions.
+
+**Analyze a video (offline inference):**
+
+> Use `analyze_video` on `/absolute/path/to/media/demo.mp4`. Summarize what happens chronologically and identify important transitions.
+
+**Visual QA (offline inference + agent coding tools):**
+
+> Run the signup Playwright test, save its recording inside `MOSS_VL_MEDIA_ROOT`, and inspect it with `analyze_test_recording`. Correlate any visible issues with the source code, make a focused fix, and rerun the test to verify.
+
+**Observe a live process (realtime backend + explicit opt-in capture):**
+
+> Start a MOSS-VL realtime visual session, observe monitor 1 at 1 FPS for 60 seconds with `start_screen_observation`, ask about unexpected UI changes, poll `get_visual_events` using `next_seq`, and then stop both observation and session.
+
+The realtime screen prompt **requires** `MOSS_VL_ALLOW_SCREEN_CAPTURE=1` and the optional `.[screen]` dependencies. Capture runs on the MCP server host (not automatically a remote client desktop), and can expose sensitive screen content. The MCP does not push alerts or run a coding agent in the background; the agent must retrieve events during its execution.
+
+### How agents use the tools
+
+```text
+Claude Code / Codex -> MCP server -> MOSS-VL-Instruct (images, recordings)
+                               \\-> MOSS-VL-Realtime (frames + prompts + events)
 ```
 
-> The `uvx` package command will work only **after publication to a package index**. For now use the local checkout command. Client and inference service must share a filesystem for offline media paths. For realtime replay, the *inference host* must be able to read the path too.
+The agent chooses when to call the tools, reasons over their results, and performs any code changes using **its own** tools. MOSS-VL supplies visual evidence; it does not edit code or control the desktop by itself.
 
 ## Configuration
 
@@ -108,7 +155,7 @@ codex mcp add moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
 | `MOSS_VL_ALLOW_SERVER_VIDEO` | `0` | Set to `1` to allow replay of server-local video paths |
 | `MOSS_VL_ALLOW_SCREEN_CAPTURE` | `0` | Set to `1` to allow opt-in capture of the MCP host's screens (max 2 FPS, 5 minutes per request) |
 
-### Session workflow
+### Session workflow (for agent orchestration)
 
 1. `start_visual_session(prompt="Watch for UI changes")` → returns `session_id`.
 2. `push_visual_frame(session_id, path="frames/001.jpg", timestamp=0.0)` → repeat with increasing timestamps; a separate capture process can produce the frames.

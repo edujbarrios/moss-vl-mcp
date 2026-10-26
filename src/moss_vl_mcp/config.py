@@ -13,6 +13,7 @@ class Settings:
     max_sessions: int = 1
     max_frame_bytes: int = 20 * 1024 * 1024
     allow_server_video: bool = False
+    allow_screen_capture: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -26,4 +27,5 @@ class Settings:
             ),
             max_sessions=int(os.getenv("MOSS_VL_MAX_SESSIONS", "1")),
             allow_server_video=os.getenv("MOSS_VL_ALLOW_SERVER_VIDEO", "0") == "1",
+            allow_screen_capture=os.getenv("MOSS_VL_ALLOW_SCREEN_CAPTURE", "0") == "1",
         )

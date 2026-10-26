@@ -54,6 +54,10 @@ class RealtimeSessionManager:
 
     async def start(self, prompt: str = "Describe important visual changes.") -> str:
         async with self._lock:
+            # A disconnected WebSocket must not permanently consume model capacity.
+            for stale_id, stale in list(self._sessions.items()):
+                if stale.closed:
+                    del self._sessions[stale_id]
             if len(self._sessions) >= self.max_sessions:
                 raise RuntimeError("Realtime session limit reached")
             ws = await websockets.connect(self.url, open_timeout=15, max_size=2**22)
@@ -150,10 +154,14 @@ class RealtimeSessionManager:
         if session is None:
             raise ValueError("Unknown session ID")
         oldest = session.events[0]["seq"] if session.events else session.seq + 1
-        data = [event for event in session.events if event["seq"] > after_seq][:limit]
+        pending = [event for event in session.events if event["seq"] > after_seq]
+        data = pending[:limit]
         return {
             "session_id": session.id, "closed": session.closed,
-            "latest_seq": session.seq, "history_gap": after_seq < oldest - 1,
+            "latest_seq": session.seq,
+            "next_seq": data[-1]["seq"] if data else after_seq,
+            "has_more": len(pending) > limit,
+            "history_gap": after_seq < oldest - 1,
             "events": data,
         }
 

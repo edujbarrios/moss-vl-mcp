@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "edujbarrios"}]
 keywords = ["mcp", "moss-vl", "computer-vision", "video", "ai-agents"]
-dependencies = ["mcp>=1.9,<3", "websockets>=13,<17"]
+dependencies = ["mcp>=2.0,<3", "websockets>=13,<17"]
 
 [project.optional-dependencies]
 offline = ["torch>=2.5", "transformers>=4.57", "accelerate>=1.0", "pillow>=10"]

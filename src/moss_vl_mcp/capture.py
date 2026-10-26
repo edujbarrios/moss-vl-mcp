@@ -91,7 +91,7 @@ class ScreenObserver:
         ):
             raise RuntimeError("Screen capture requires: pip install 'moss-vl-mcp[screen]'")
 
-        self.realtime._get(session_id)  # Fail immediately for absent/closed sessions.
+        self.realtime.frame_timestamp(session_id)  # Validate session before scheduling capture.
         async with self._lock:
             task = self._tasks.get(session_id)
             if task is not None and not task.done():
@@ -114,7 +114,7 @@ class ScreenObserver:
                 jpeg = await asyncio.to_thread(self.capture, monitor_index)
                 # Upstream reference protocol accepts timestamp + JPEG/PNG bytes.
                 await self.realtime.push_frame(
-                    state.session_id, jpeg, time.monotonic() - started
+                    state.session_id, jpeg, self.realtime.frame_timestamp(state.session_id)
                 )
                 state.sent_frames += 1
                 await asyncio.sleep(max(0.0, interval - (time.monotonic() - cycle)))

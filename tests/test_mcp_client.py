@@ -52,7 +52,7 @@ async def test_tools_available_and_image_workflow(tmp_path):
 
     async with Client(mcp, raise_exceptions=True) as client:
         catalog = await client.list_tools()
-        names = {tool.name for tool in catalog}
+        names = {tool.name for tool in catalog.tools}
         assert {"analyze_image", "analyze_video", "inspect_ui", "compare_ui_states",
                 "start_visual_session", "push_visual_frame", "ask_visual_session",
                 "get_visual_events", "stop_visual_session"}.issubset(names)

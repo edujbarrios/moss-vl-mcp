@@ -4,10 +4,10 @@ This targets OpenMOSS reference /v1/realtime, NOT SGLang-Omni's different protoc
 """
 
 import asyncio
-from collections import deque
-from dataclasses import dataclass, field
 import json
 import math
+from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -99,7 +99,7 @@ class RealtimeSessionManager:
                     session.record(payload)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except (websockets.exceptions.WebSocketException, OSError) as exc:
             session.record({"type": "connection_error", "message": str(exc)})
         finally:
             session.closed = True

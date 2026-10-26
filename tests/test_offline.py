@@ -1,12 +1,12 @@
-"""Offline adapter tests without downloading an 11B model."""
+"""Offline adapter contract tests; no GPU or model weights required."""
 
-from contextlib import nullcontext
 import sys
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
 
-from moss_vl_mcp.offline import OfflineVisionBackend
+from moss_vl_mcp.offline import OfflineVisionBackend, build_multimodal_query
 
 
 class FakeModel:
@@ -18,15 +18,36 @@ class FakeModel:
         return {"results": [{"text": "A user opens the settings panel."}]}
 
 
+def test_multimodal_query_schema_for_two_images():
+    query = build_multimodal_query("Compare UI", ["before.png", "after.png"], [], 128)
+    assert query == {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": "before.png"},
+                    {"type": "image", "image": "after.png"},
+                    {"type": "text", "text": "Compare UI"},
+                ],
+            }
+        ],
+        "generate_kwargs": {"max_new_tokens": 128, "do_sample": False},
+    }
+
+
+@pytest.mark.parametrize("prompt,tokens", [("", 256), ("   ", 256), ("hello", 0), ("hello", 2049)])
+def test_build_query_validation(prompt, tokens):
+    with pytest.raises(ValueError):
+        build_multimodal_query(prompt, [], [], tokens)
+
+
 @pytest.mark.asyncio
 async def test_offline_adapter_reuses_loaded_model(monkeypatch):
     model = FakeModel()
     backend = OfflineVisionBackend("test-checkpoint")
     backend._model = model
     backend._processor = object()
-    monkeypatch.setitem(
-        sys.modules, "torch", SimpleNamespace(inference_mode=lambda: nullcontext())
-    )
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(inference_mode=nullcontext))
 
     first = await backend.analyze("Describe it", images=["/tmp/example.png"])
     second = await backend.analyze("Summarize", videos=["/tmp/demo.mp4"])
@@ -34,8 +55,14 @@ async def test_offline_adapter_reuses_loaded_model(monkeypatch):
     assert first == "A user opens the settings panel."
     assert second == first
     assert len(model.received) == 2
-    assert model.received[0][0]["images"] == ["/tmp/example.png"]
-    assert model.received[1][0]["videos"] == ["/tmp/demo.mp4"]
+    assert model.received[0][0]["messages"][0]["content"][0] == {
+        "type": "image",
+        "image": "/tmp/example.png",
+    }
+    assert model.received[1][0]["messages"][0]["content"][0] == {
+        "type": "video",
+        "video": "/tmp/demo.mp4",
+    }
 
 
 @pytest.mark.asyncio

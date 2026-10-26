@@ -2,6 +2,7 @@
 
 from mcp.server import MCPServer
 
+from .capture import ScreenObserver
 from .config import Settings
 from .media import (
     IMAGE_SUFFIXES,
@@ -35,6 +36,7 @@ def create_server(
     realtime = realtime or RealtimeSessionManager(
         settings.realtime_url, settings.max_sessions
     )
+    screen = ScreenObserver(realtime, enabled=settings.allow_screen_capture)
     mcp = MCPServer("moss-vl-mcp")
 
     @mcp.tool()
@@ -122,8 +124,29 @@ def create_server(
         return realtime.events(session_id, after_seq, limit)
 
     @mcp.tool()
+    async def start_screen_observation(
+        session_id: str,
+        monitor_index: int = 1,
+        fps: float = 1.0,
+        duration_seconds: float = 60.0,
+    ) -> dict:
+        """Capture a local display continuously (opt-in) into a realtime session."""
+        return await screen.start(session_id, monitor_index, fps, duration_seconds)
+
+    @mcp.tool()
+    async def get_screen_observation_status(session_id: str) -> dict:
+        """Report frame count and capture state, including any capture error."""
+        return screen.status(session_id)
+
+    @mcp.tool()
+    async def stop_screen_observation(session_id: str) -> dict:
+        """Stop the display producer without closing the realtime model session."""
+        return await screen.stop(session_id)
+
+    @mcp.tool()
     async def stop_visual_session(session_id: str) -> dict[str, str]:
         """Close a realtime observation session and free its upstream connection."""
+        await screen.stop_if_active(session_id)
         await realtime.stop(session_id)
         return {"status": "stopped", "session_id": session_id}
 

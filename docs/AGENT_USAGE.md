@@ -38,10 +38,10 @@ On Windows, the virtual-environment executable is typically `.venv\Scripts\moss-
 Replace both absolute paths before running:
 
 ```bash
-claude mcp add --transport stdio --scope user \
+claude mcp add --scope user \
   --env MOSS_VL_MEDIA_ROOT=/absolute/path/to/media \
   --env MOSS_VL_REALTIME_URL=ws://127.0.0.1:8000/v1/realtime \
-  moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
+  --transport stdio moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
 
 claude mcp list
 ```

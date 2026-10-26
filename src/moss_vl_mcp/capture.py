@@ -11,7 +11,7 @@ import importlib.util
 import io
 import time
 from dataclasses import dataclass
-from typing import Callable, Protocol
+from typing import Protocol
 
 from .realtime import RealtimeSessionManager
 

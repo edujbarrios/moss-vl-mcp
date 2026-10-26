@@ -20,6 +20,7 @@ The objective is not just `analyze_image`: it is to grow into a **persistent vis
 | Visual QA | `inspect_ui`, `analyze_test_recording`, `compare_ui_states` | Prompt-based inference, not automated defect proof |
 | Realtime | `start_visual_session`, `push_visual_frame`, `ask_visual_session`, `get_visual_events`, `stop_visual_session` | Implemented against upstream reference WebSocket |
 | Realtime replay | `replay_visual_video`, `stop_visual_video` | Opt-in; path must exist on inference host |
+| Continuous screen capture | `start_screen_observation`, `get_screen_observation_status`, `stop_screen_observation` | Opt-in; local display capture using optional `mss` / Pillow |
 
 The realtime backend can emit incremental outputs, acknowledgements and video lifecycle notifications. `get_visual_events(after_seq=...)` exposes a bounded event log for polling. It does **not** push spontaneous notifications into the MCP client; integrations must poll or orchestrate their own subscription loop.
 
@@ -33,6 +34,8 @@ Claude Code / Codex / other MCP clients
       src/moss_vl_mcp/server.py    (tool facade / composition root)
             /               \
      offline.py           realtime.py
+                             ^
+                         capture.py (optional local screen producer)
    Transformers lazy      Session registry + WebSocket adapter
      inference                     |
           |               MOSS-VL reference realtime server
@@ -103,6 +106,7 @@ codex mcp add moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
 | `MOSS_VL_REALTIME_URL` | `ws://127.0.0.1:8000/v1/realtime` | Reference backend WebSocket endpoint |
 | `MOSS_VL_MAX_SESSIONS` | `1` | Limit for concurrently tracked sessions (reference backend itself supports one) |
 | `MOSS_VL_ALLOW_SERVER_VIDEO` | `0` | Set to `1` to allow replay of server-local video paths |
+| `MOSS_VL_ALLOW_SCREEN_CAPTURE` | `0` | Set to `1` to allow opt-in capture of the MCP host's screens (max 2 FPS, 5 minutes per request) |
 
 ### Session workflow
 
@@ -112,13 +116,33 @@ codex mcp add moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
 4. `get_visual_events(session_id, after_seq=0)` → read output and remember `next_seq` to page through the event log without skipping messages.
 5. `stop_visual_session(session_id)` → frees the model connection.
 
-**Scope:** The MCP does not yet include continuous local camera/screen capture, browser hooks, proactive MCP notifications, or SGLang-Omni integration. These are roadmap items, not implemented features.
+### Optional continuous screen observation
+
+This feature captures the screen of the **machine running the MCP server**, not automatically the desktop of a remote Claude/Codex client. It is **disabled by default** because a screen can contain passwords, private messages, and other sensitive information. Enable it only on a computer you control and for sessions you explicitly intend to observe:
+
+```bash
+pip install -e '.[screen]'
+export MOSS_VL_ALLOW_SCREEN_CAPTURE=1
+moss-vl-mcp
+```
+
+Start a realtime model session, then call:
+
+1. `start_visual_session(prompt="Describe significant UI changes")`
+2. `start_screen_observation(session_id, monitor_index=1, fps=1.0, duration_seconds=60)`
+3. `get_screen_observation_status(session_id)` and `get_visual_events(session_id, after_seq=0)` periodically
+4. `stop_screen_observation(session_id)` and `stop_visual_session(session_id)`
+
+Screen frames are compressed as JPEG and transmitted directly to the configured Realtime WebSocket; this producer does not save screenshots to disk. One producer can run per session, limited to **2 FPS** and **300 seconds** per call. Frame capture is asynchronous while the MCP process remains alive, but visual events must be polled by the agent.
+
+**Scope:** Camera capture, browser hooks, proactive MCP notifications, and SGLang-Omni integration are not implemented yet. They remain roadmap items.
 
 ## Security & limitations
 
 - Media access is restricted to `MOSS_VL_MEDIA_ROOT`; choose a narrow dedicated directory and avoid mounting secrets.
 - Do not expose the upstream reference WebSocket directly to the internet: it has no built-in authentication. Use loopback or an authenticated TLS reverse proxy.
 - `replay_visual_video` is disabled by default; the path is read on the inference host. Configure shared filesystems deliberately.
+- Screen capture is also disabled by default. It can capture private data on the MCP host: review the screen, enable it deliberately, and stop observation when no longer needed.
 - Local media is sent to the inference backend when using realtime tools; ensure you trust that service.
 - WebSocket output can contain MOSS-VL control tokens. Event history is volatile and limited to the latest 500 messages per session.
 - Reference realtime serving supports one active session per model instance. Setting the MCP session limit higher does **not** increase backend capacity.
@@ -140,7 +164,8 @@ Tests use fake inference adapters or WebSockets; they do not require GPU weights
 - [x] MCP tool registration, offline adapter, realtime WebSocket sessions, event polling
 - [x] Visual QA prompts and initial unit tests
 - [ ] GPU end-to-end verification against original MOSS-VL checkpoints
-- [ ] Local screen/camera capture workers with bounded queues and consent controls
+- [x] Optional local screen capture with explicit opt-in and bounded duration/FPS
+- [ ] Camera capture, user-level consent UI, and end-to-end producer reliability tests
 - [ ] Dedicated SGLang-Omni adapter and parallel stream support
 - [ ] Temporal QA reports tied to evidence frames and Playwright traces
 - [ ] Release to PyPI / MCP Registry

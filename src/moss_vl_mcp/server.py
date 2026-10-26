@@ -4,11 +4,13 @@ from mcp.server import MCPServer
 
 from .config import Settings
 from .media import (
-    IMAGE_SUFFIXES, STREAM_IMAGE_SUFFIXES, VIDEO_SUFFIXES, resolve_media,
+    IMAGE_SUFFIXES,
+    STREAM_IMAGE_SUFFIXES,
+    VIDEO_SUFFIXES,
+    resolve_media,
 )
 from .offline import OfflineVisionBackend
 from .realtime import RealtimeSessionManager
-
 
 UI_PROMPT = (
     "Act as a visual QA reviewer. Describe the interface, visible defects, "

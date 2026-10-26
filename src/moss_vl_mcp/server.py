@@ -1,6 +1,6 @@
 """Thin MCP transport layer; business logic lives in backend adapters."""
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 
 from .config import Settings
 from .media import (
@@ -26,14 +26,14 @@ def create_server(
     settings: Settings | None = None,
     offline: OfflineVisionBackend | None = None,
     realtime: RealtimeSessionManager | None = None,
-) -> FastMCP:
+) -> MCPServer:
     """Composition root: inject adapters for testing or alternative inference engines."""
     settings = settings or Settings.from_env()
     offline = offline or OfflineVisionBackend(settings.offline_checkpoint)
     realtime = realtime or RealtimeSessionManager(
         settings.realtime_url, settings.max_sessions
     )
-    mcp = FastMCP("moss-vl-mcp")
+    mcp = MCPServer("moss-vl-mcp")
 
     @mcp.tool()
     async def analyze_image(path: str, prompt: str = "Describe this image.") -> str:
@@ -129,4 +129,4 @@ def create_server(
 
 
 def main() -> None:
-    create_server().run(transport="stdio")
+    create_server().run()

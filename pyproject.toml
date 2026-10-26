@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "moss-vl-mcp"
+version = "0.1.0"
+description = "Unofficial MCP server for MOSS-VL: visual analysis and realtime observation"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{name = "edujbarrios"}]
+keywords = ["mcp", "moss-vl", "computer-vision", "video", "ai-agents"]
+dependencies = ["mcp>=1.9,<3", "websockets>=13,<17"]
+
+[project.optional-dependencies]
+offline = ["torch>=2.5", "transformers>=4.57", "accelerate>=1.0", "pillow>=10"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.9"]
+
+[project.scripts]
+moss-vl-mcp = "moss_vl_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/moss_vl_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

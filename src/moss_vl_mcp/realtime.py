@@ -6,6 +6,7 @@ This targets OpenMOSS reference /v1/realtime, NOT SGLang-Omni's different protoc
 import asyncio
 import json
 import math
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +24,7 @@ class RealtimeSession:
     task: asyncio.Task[None] | None = None
     seq: int = 0
     last_timestamp: float = -1.0
+    started_monotonic: float = field(default_factory=time.monotonic)
     closed: bool = False
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -105,6 +107,11 @@ class RealtimeSessionManager:
             session.closed = True
             session.record({"type": "disconnected"})
             await session.websocket.close()
+
+    def frame_timestamp(self, session_id: str) -> float:
+        """Seconds in the session stream, clamped to the previous frame timestamp."""
+        session = self._get(session_id)
+        return max(session.last_timestamp, time.monotonic() - session.started_monotonic)
 
     async def ask(self, session_id: str, prompt: str) -> None:
         if not prompt.strip():

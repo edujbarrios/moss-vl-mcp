@@ -1,139 +1,150 @@
 # MOSS-VL MCP
 
-**Give AI Agents Eyes.** An unofficial community MCP integration for [OpenMOSS/MOSS-VL](https://github.com/OpenMOSS/MOSS-VL), by [@edujbarrios](https://github.com/edujbarrios).
+**Give AI Agents Eyes — from static images to continuous visual understanding.**
 
-> **Project status:** early development. This project is independent and is not affiliated with, endorsed by, or maintained by OpenMOSS.
+Unofficial, community-maintained Python MCP server for [OpenMOSS/MOSS-VL](https://github.com/OpenMOSS/MOSS-VL), created by [@edujbarrios](https://github.com/edujbarrios). Not affiliated with or endorsed by the OpenMOSS team.
 
-## Why this MCP exists
+> **Early development (v0.1).** Tools are implemented, but have not yet been validated against a GPU-hosted MOSS-VL instance. Realtime support currently targets the upstream **reference** `/v1/realtime` WebSocket API, **not** SGLang-Omni's separate wire protocol.
 
-AI coding and automation agents can inspect individual images, but often lack a reusable way to **observe how visual processes evolve over time**. This project aims to make MOSS-VL's understanding of screenshots, recorded video, and ongoing visual streams available as tools to MCP-compatible agents, including Claude Code and OpenAI Codex.
+## Why this MCP?
 
-The goal goes beyond single-frame Q&A: an agent should be able to start an observation session, deliver timestamped frames, ask questions while new images arrive, collect relevant events, and combine those observations with coding, testing, or automation tools.
+Agent workflows can read files and execute code, but often cannot continuously observe what changes on a screen or in a video. MOSS-VL MCP exposes visual perception as agent-accessible tools, allowing agents to **see** images, **understand** recordings, **observe** timestamped frame streams, **ask questions** during a session, and **react** using visual evidence combined with their existing tools.
 
-## Capabilities (first iteration)
+The objective is not just `analyze_image`: it is to grow into a **persistent visual perception layer** for Claude Code, OpenAI Codex, and other MCP clients. A visual QA agent could record a test, identify a suspicious UI transition, correlate evidence with source code, and run the test again after a fix. The model provides observations; the coding agent remains responsible for actions and verification.
 
-| Capability | Tools | State |
+## Capabilities
+
+| Module | MCP tools | Status |
 | --- | --- | --- |
-| Offline image and video understanding | `analyze_image`, `analyze_video` | Implemented adapter; requires upstream inference installation |
-| Visual QA | `inspect_ui`, `analyze_test_recording` | Prompt-based tools; not an autonomous testing system |
-| Live visual sessions | `start_visual_session`, `send_visual_frame`, `ask_visual_session`, `get_visual_events`, `stop_visual_session` | WebSocket adapter to official MOSS-VL-Realtime reference server |
-| Capture screen/camera automatically | — | Planned; currently a producer must submit frames |
-| Event subscriptions/push alerts | — | Planned; clients poll `get_visual_events` |
+| Offline vision | `analyze_image`, `analyze_video` | Implemented, requires model/GPU |
+| Visual QA | `inspect_ui`, `analyze_test_recording`, `compare_ui_states` | Prompt-based inference, not automated defect proof |
+| Realtime | `start_visual_session`, `push_visual_frame`, `ask_visual_session`, `get_visual_events`, `stop_visual_session` | Implemented against upstream reference WebSocket |
+| Realtime replay | `replay_visual_video`, `stop_visual_video` | Opt-in; path must exist on inference host |
 
-The reference WebSocket backend supports one session per model process. Use a separate process for each active session or a specialized multi-session backend with a separately implemented adapter.
+The realtime backend can emit incremental outputs, acknowledgements and video lifecycle notifications. `get_visual_events(after_seq=...)` exposes a bounded event log for polling. It does **not** push spontaneous notifications into the MCP client; integrations must poll or orchestrate their own subscription loop.
 
-## Install
+## Architecture
 
-Python 3.11+:
+```text
+Claude Code / Codex / other MCP clients
+                    |
+               MCP / stdio
+                    |
+      src/moss_vl_mcp/server.py    (tool facade / composition root)
+            /               \
+     offline.py           realtime.py
+   Transformers lazy      Session registry + WebSocket adapter
+     inference                     |
+          |               MOSS-VL reference realtime server
+     MOSS-VL-Instruct       ws://127.0.0.1:8000/v1/realtime
+```
+
+Patterns: **Adapter** (separate backend contracts), **Dependency Injection** (testable server composition), **Factory** (per-session creation), and **Registry** (bounded session lifecycle). No model weights are included.
+
+## Setup
+
+Requires Python 3.11+ for the MCP adapter; upstream MOSS-VL recommends a Python 3.12 environment and compatible PyTorch/Transformers builds for model inference.
 
 ```bash
-git clone https://github.com/edujbarrios/moss-vl-mcp.git
-cd moss-vl-mcp
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e .
 ```
 
-You also need to install and run the actual **MOSS-VL model/backend**. This Python package does not bundle model weights, GPUs, Transformers, or the OpenMOSS repository.
-
-### Offline image/video backend
-
-Install [OpenMOSS/MOSS-VL](https://github.com/OpenMOSS/MOSS-VL) and its inference dependencies in the Python environment that will invoke its script. Configure:
+For local *offline* inference also install the optional dependencies, and follow [OpenMOSS's inference installation notes](https://github.com/OpenMOSS/MOSS-VL/tree/main/inference/offline). The model is loaded lazily on the first request and needs substantial GPU memory.
 
 ```bash
-export MOSS_VL_MEDIA_ROOT=/absolute/path/to/allowed/media
-export MOSS_VL_OFFLINE_SCRIPT=/absolute/path/to/MOSS-VL/inference/offline/run_inference.py
-export MOSS_VL_CHECKPOINT=/absolute/path/to/MOSS-VL-Instruct-checkpoint
-# Optional if the model environment is separate:
-export MOSS_VL_PYTHON=/absolute/path/to/model-python
+pip install -e '.[offline]'
 ```
 
-Each offline request runs the upstream script as a subprocess, which **reloads the model for every request**. This is an integration baseline, not an efficient production inference service. A persistent inference adapter is on the roadmap.
-
-### Realtime backend
-
-In an installation of the upstream repository with a compatible GPU:
+For *realtime* inference, separately deploy the [official reference service](https://github.com/OpenMOSS/MOSS-VL/blob/main/inference/realtime/README.md) with its dependencies and GPU:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python inference/realtime/run_online_inference.py --serve --host 127.0.0.1 --port 8000
+# In your MOSS-VL checkout / compatible model environment:
+CUDA_VISIBLE_DEVICES=0 python inference/realtime/run_online_inference.py \
+  --serve --host 127.0.0.1 --port 8000
 ```
 
-Configure this MCP server:
+Then configure this MCP process:
 
 ```bash
-export MOSS_VL_REALTIME_URL=ws://127.0.0.1:8000/v1/realtime
-export MOSS_VL_MEDIA_ROOT=/absolute/path/to/allowed/media
-```
-
-The initial adapter targets only the upstream **reference WebSocket protocol** at `/v1/realtime`. SGLang-Omni's `/v1/video/realtime` and hosted MOSI's `/v1/realtime` use different protocols and **are not interchangeable**.
-
-### Launch the MCP server
-
-```bash
+export MOSS_VL_MEDIA_ROOT="$HOME/videos"  # restrict which local files agents may read
+export MOSS_VL_REALTIME_URL="ws://127.0.0.1:8000/v1/realtime"
+export MOSS_VL_CHECKPOINT="OpenMOSS-Team/MOSS-VL-Instruct-0708"
 moss-vl-mcp
-# or:
-python -m moss_vl_mcp
 ```
 
-The server uses MCP **stdio**, so tools such as Claude Code or Codex should launch it as a child process.
+### Claude Code
 
-Claude Code, from the checkout directory:
+```bash
+claude mcp add moss-vl -- uvx --from moss-vl-mcp moss-vl-mcp
+```
+
+For a local source checkout without a published package:
 
 ```bash
 claude mcp add moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
 ```
 
-Codex:
+### OpenAI Codex
 
 ```bash
 codex mcp add moss-vl -- /absolute/path/to/moss-vl-mcp/.venv/bin/moss-vl-mcp
 ```
 
-Ensure the model/backend environment variables are present in the spawned MCP process.
-
-## Example agent workflows
-
-- **Visual debugging:** have Playwright save a screenshot or video, inspect it through an MCP tool, then verify the proposed fix in code.
-- **Ongoing observation:** start a visual session, feed it timestamped JPEG/PNG frames from a camera or screen-capture producer, send a question, and poll for output.
-- **Recorded process analysis:** analyze a training or workflow video and ask for a chronological explanation of the observed actions.
-
-MOSS-VL output can be incorrect; validate observations before taking consequential actions.
-
-## Architecture
-
-```text
-MCP tools (server.py)
-   |
-   +-- VisualService -------- OfflineInference (Protocol)
-   |                             +-- OfficialOfflineCLI
-   +-- SessionManager ------- RealtimeSession (Protocol)
-   |                             +-- ReferenceWebSocketSession
-   +-- MediaGuard (explicit filesystem allowlist)
-```
-
-The model adapters are replaceable (Strategy / Ports & Adapters), sessions own their lifecycle, and filesystem access is restricted to `MOSS_VL_MEDIA_ROOT`. Remote media URLs are not accepted by MCP tools.
+> The `uvx` package command will work only **after publication to a package index**. For now use the local checkout command. Client and inference service must share a filesystem for offline media paths. For realtime replay, the *inference host* must be able to read the path too.
 
 ## Configuration
 
-See `.env.example`. Environment variables are read when the process starts. Media paths must resolve inside the configured root. Only local files with supported extensions are accepted.
+| Environment variable | Default | Description |
+| --- | --- | --- |
+| `MOSS_VL_MEDIA_ROOT` | current working directory | Root allowed for local images and videos; rejects traversal and symlink escape |
+| `MOSS_VL_CHECKPOINT` | `OpenMOSS-Team/MOSS-VL-Instruct-0708` | Offline model ID or checkpoint directory |
+| `MOSS_VL_REALTIME_URL` | `ws://127.0.0.1:8000/v1/realtime` | Reference backend WebSocket endpoint |
+| `MOSS_VL_MAX_SESSIONS` | `1` | Limit for concurrently tracked sessions (reference backend itself supports one) |
+| `MOSS_VL_ALLOW_SERVER_VIDEO` | `0` | Set to `1` to allow replay of server-local video paths |
+
+### Session workflow
+
+1. `start_visual_session(prompt="Watch for UI changes")` → returns `session_id`.
+2. `push_visual_frame(session_id, path="frames/001.jpg", timestamp=0.0)` → repeat with increasing timestamps; a separate capture process can produce the frames.
+3. `ask_visual_session(session_id, prompt="What changed?")` → queues the follow-up question.
+4. `get_visual_events(session_id, after_seq=0)` → read output and remember `latest_seq` to avoid duplicates.
+5. `stop_visual_session(session_id)` → frees the model connection.
+
+**Scope:** The MCP does not yet include continuous local camera/screen capture, browser hooks, proactive MCP notifications, or SGLang-Omni integration. These are roadmap items, not implemented features.
+
+## Security & limitations
+
+- Media access is restricted to `MOSS_VL_MEDIA_ROOT`; choose a narrow dedicated directory and avoid mounting secrets.
+- Do not expose the upstream reference WebSocket directly to the internet: it has no built-in authentication. Use loopback or an authenticated TLS reverse proxy.
+- `replay_visual_video` is disabled by default; the path is read on the inference host. Configure shared filesystems deliberately.
+- Local media is sent to the inference backend when using realtime tools; ensure you trust that service.
+- WebSocket output can contain MOSS-VL control tokens. Event history is volatile and limited to the latest 500 messages per session.
+- Reference realtime serving supports one active session per model instance. Setting the MCP session limit higher does **not** increase backend capacity.
+- Model-generated QA descriptions are hypotheses requiring verification, not guaranteed defect reports or safety signals.
+- Inference loads third-party checkpoint code with `trust_remote_code=True`; use vetted checkpoints and isolated environments.
 
 ## Development
 
 ```bash
+pip install -e '.[dev]'
+ruff check src tests
 pytest -q
 ```
 
-Tests use fakes and do not require model weights or a GPU. Integration with a real MOSS-VL checkpoint and video streams has not yet been verified.
+Tests use fake inference adapters or WebSockets; they do not require GPU weights. CI runs lint and unit tests. End-to-end GPU tests are a future milestone.
 
 ## Roadmap
 
-- Persistent offline model serving
-- Screen/camera producer with explicit user consent and resource limits
-- More advanced event filtering, semantic summaries, and visual memory
-- SGLang-Omni multi-session adapter
-- Playwright hooks and repeatable QA evaluations
-- Security hardening and authenticated remote deployment
+- [x] MCP tool registration, offline adapter, realtime WebSocket sessions, event polling
+- [x] Visual QA prompts and initial unit tests
+- [ ] GPU end-to-end verification against original MOSS-VL checkpoints
+- [ ] Local screen/camera capture workers with bounded queues and consent controls
+- [ ] Dedicated SGLang-Omni adapter and parallel stream support
+- [ ] Temporal QA reports tied to evidence frames and Playwright traces
+- [ ] Release to PyPI / MCP Registry
 
-## Attribution / Disclaimer
+## Credits & disclaimer
 
-Independent unofficial integration created and maintained by [@edujbarrios](https://github.com/edujbarrios). Not affiliated with, sponsored by, endorsed by, or maintained by [OpenMOSS](https://github.com/OpenMOSS/MOSS-VL). All credit for the original models, research, and inference implementations belongs to their respective authors. Check the licenses for model checkpoints and dependencies separately.
+**MOSS-VL MCP** is an independent, unofficial community project by [@edujbarrios](https://github.com/edujbarrios). It is **not affiliated with, endorsed by, sponsored by, or maintained by OpenMOSS**. Original models, inference code and research belong to the [OpenMOSS team](https://github.com/OpenMOSS/MOSS-VL) and their contributors. Consult upstream licenses and each model checkpoint's terms before deployment.

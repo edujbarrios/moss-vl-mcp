@@ -1,20 +1,22 @@
 # MOSS-VL MCP 👁️
 
-**Dale visión a Claude Code, Codex y otros agentes compatibles con MCP.** Usa [MOSS-VL](https://github.com/OpenMOSS/MOSS-VL) para analizar capturas, comparar interfaces, revisar grabaciones de pruebas y observar cambios visuales en tiempo real.
+**Give Claude Code, Codex, and other MCP-compatible agents visual understanding.** Use [MOSS-VL](https://github.com/OpenMOSS/MOSS-VL) to inspect screenshots, compare UI states, review test recordings, and observe visual changes over time.
 
-Es un **servidor MCP no oficial** en Python. El agente razona, ejecuta pruebas y modifica el código; **MOSS-VL aporta las observaciones visuales**.
+This is an **unofficial Python MCP server**. Your coding agent still reasons, runs tests, and edits code; **MOSS-VL provides visual observations**.
 
-> **Estado: v0.1, experimental.** Las herramientas y pruebas unitarias están implementadas, pero la inferencia GPU completa no se ha verificado de extremo a extremo. El MCP no incluye pesos ni inicia automáticamente un backend GPU.
+> **Status: v0.1, experimental.** The MCP tools and mocked unit tests are implemented, but full GPU inference has **not** been verified end to end in this repository. Model weights are not included, and this MCP does not launch a GPU inference backend.
 
-## ¿Para qué sirve? Un ejemplo concreto
+## What is it useful for? A practical example
 
-Imagina que un test de Playwright termina sin errores, pero la pantalla final tiene un botón oculto por un modal. Sin visión, un agente solo conoce los logs y el DOM. Con este MCP puede **inspeccionar una captura**, **compararla con una versión anterior** y conectar lo observado con el código.
+Imagine a Playwright test passes, but the final screen shows a button hidden behind a modal. Logs and DOM assertions alone might miss that. With this MCP, your agent can **inspect a screenshot**, **compare it with an earlier state**, and connect the visual evidence to the relevant code.
 
-**Flujo:** guardar captura → llamar a **inspect_ui** → comprobar en el código el posible fallo → corregirlo → comparar capturas con **compare_ui_states**. Es un análisis basado en un modelo, no un diff píxel a píxel.
+**Workflow:** save a screenshot → call **inspect_ui** → check the suspected issue against the code → apply a fix → compare before/after screenshots with **compare_ui_states**.
 
-## Instalación rápida (Python 3.11+)
+These are model-generated observations, **not** deterministic pixel diffs or proof that a bug exists.
 
-En la máquina donde se ejecutará Claude Code o Codex:
+## Quick start (Python 3.11+)
+
+Run these commands on the machine where Claude Code or Codex will launch the MCP:
 
 ~~~bash
 git clone https://github.com/edujbarrios/moss-vl-mcp.git
@@ -25,13 +27,13 @@ python -m pip install -e .
 mkdir -p "$HOME/moss-vl-media"
 ~~~
 
-En Windows, utiliza el ejecutable del entorno virtual situado en la carpeta .venv/Scripts. Los comandos siguientes son para Bash/macOS/Linux.
+These examples use Bash on macOS/Linux. On Windows, activate the virtual environment using your shell and use the executable at .venv\Scripts\moss-vl-mcp.exe.
 
-**Importante:** la instalación base permite registrar el MCP y comprobar la configuración, pero **todavía no realiza inferencia visual**.
+**Important:** the base installation is enough to register the MCP and check its prerequisites, **not** to run visual inference. A compatible inference backend is required for image, video, or realtime analysis.
 
-### Conectar con Claude Code
+### Connect to Claude Code
 
-Desde la carpeta del repositorio:
+From the repository directory:
 
 ~~~bash
 claude mcp add --scope user \
@@ -41,9 +43,9 @@ claude mcp add --scope user \
 claude mcp list
 ~~~
 
-Abre una sesión nueva de Claude Code y usa **/mcp** para inspeccionar las herramientas.
+Start a new Claude Code session and run **/mcp** to inspect the connection and available tools.
 
-### Conectar con Codex
+### Connect to Codex
 
 ~~~bash
 codex mcp add moss-vl \
@@ -53,103 +55,105 @@ codex mcp add moss-vl \
 codex mcp list
 ~~~
 
-Reinicia la sesión del agente tras registrarlo. Se usa el ejecutable del entorno local: **no se presupone que este paquete esté publicado en PyPI**.
+Restart the agent session after registration. Both commands point to the **locally installed virtual-environment executable**; this project does not assume a published PyPI package.
 
-## Demo 1: comprobar el MCP sin GPU
+## Demo 1: check your setup without a GPU
 
-Escribe **en el chat del agente**, no en una terminal:
+Type this **in your agent's chat**, not in a terminal:
 
-> Usa la herramienta **check_moss_vl_setup** de moss-vl. Explícame qué dependencias detectas, si existe la carpeta de medios y qué necesito para analizar una captura. No intentes cargar ningún modelo.
+> Call the moss-vl MCP tool **check_moss_vl_setup**. Tell me which optional dependencies are detected, whether the media folder exists, and what I still need to analyze a screenshot. Do not load a model.
 
-La herramienta indica si está disponible la carpeta de medios, detecta módulos opcionales y muestra si la captura está habilitada. **No comprueba** disponibilidad de GPU, compatibilidad del checkpoint, inferencia real ni conexión con el backend realtime. Detectar paquetes **no** implica que el modelo esté funcionando.
+The tool checks the media folder, optional Python modules, and whether screen capture is enabled. It **does not** check GPU availability, checkpoint compatibility, actual inference, or realtime WebSocket connectivity. Installed dependencies are **not** proof that the model works.
 
-## Demo 2: inspeccionar una captura (requiere modelo offline)
+## Demo 2: inspect a screenshot (offline model required)
 
-**1. Prepara el backend.** Instala y configura MOSS-VL Instruct según la [guía oficial offline](https://github.com/OpenMOSS/MOSS-VL/tree/main/inference/offline) en un entorno GPU compatible. Instala además las dependencias opcionales de este MCP:
+**1. Prepare the inference environment.** Follow the [official MOSS-VL offline inference guide](https://github.com/OpenMOSS/MOSS-VL/tree/main/inference/offline) to configure a compatible checkpoint and GPU environment. Install this MCP's optional dependencies in that environment:
 
 ~~~bash
 python -m pip install -e '.[offline]'
 ~~~
 
-El checkpoint predeterminado es **OpenMOSS-Team/MOSS-VL-Instruct-0708**. Si necesitas otro, define **MOSS_VL_CHECKPOINT** en las variables de entorno del registro MCP. El modelo se carga en la primera petición de análisis.
+The default checkpoint is **OpenMOSS-Team/MOSS-VL-Instruct-0708**. To use a different checkpoint, set **MOSS_VL_CHECKPOINT** in the MCP client's environment configuration and restart the client. The model is loaded on the first visual analysis request.
 
-**2. Copia la captura a la carpeta permitida.**
+**2. Place your screenshot inside the allowed media folder.**
 
 ~~~bash
-cp /ruta/a/tu/captura.png "$HOME/moss-vl-media/login.png"
+cp /path/to/your/screenshot.png "$HOME/moss-vl-media/login.png"
 ~~~
 
-**3. Pide al agente que la analice:**
+**3. Ask your agent:**
 
-> Usa **inspect_ui** de moss-vl sobre la imagen **login.png** de la carpeta de medios. Describe el diseño, posibles elementos solapados y mensajes de error. Separa hechos visibles de hipótesis y sugiere qué comprobar en el código.
+> Use moss-vl **inspect_ui** on **login.png** in the configured media folder. Describe the layout, any overlapping elements, and visible error messages. Separate what you can see from hypotheses, then suggest what to verify in the source code.
 
-**4. Comprueba un cambio visual.** Guarda dos capturas **antes.png** y **despues.png** en la misma carpeta y pregunta:
+**4. Verify a visual change.** Save two screenshots in the same folder as **before.png** and **after.png**. Then ask:
 
-> Llama a **compare_ui_states** con **antes.png** y **despues.png**. Describe qué cambió, qué posibles regresiones aparecen y qué no puedes confirmar solo con las imágenes.
+> Call **compare_ui_states** with **before.png** and **after.png**. Explain what changed, which visible changes might be regressions, and what cannot be determined from the images alone.
 
-El MCP devuelve **observaciones**. El agente, los tests y la revisión humana deben confirmar cualquier defecto antes de darlo por solucionado.
+The MCP returns **visual observations**. The agent, automated tests, and human review must verify any suspected issue before considering it resolved.
 
-## Demo 3: revisar un vídeo de una prueba
+## Demo 3: review a test recording
 
-Guarda una grabación de Playwright en la carpeta permitida como **registro.mp4** y escribe:
+Save a Playwright recording under the configured media folder as **recording.mp4**. Ask your agent:
 
-> Usa **analyze_test_recording** de moss-vl sobre **registro.mp4**. Resume los pasos visibles por orden, identifica estados inesperados y relaciónalos con las partes del código que deberíamos revisar. No inventes eventos invisibles.
+> Use moss-vl **analyze_test_recording** on **recording.mp4**. Summarize the visible steps in order, identify unexpected UI states, and point to relevant parts of the codebase to investigate. Do not invent events that are not shown.
 
-Para preguntas generales, usa **analyze_video**. Para describir imágenes sin la plantilla de QA, usa **analyze_image**. **Este MCP no ejecuta Playwright ni crea grabaciones por sí mismo**: los archivos tienen que existir antes de analizarlos.
+Use **analyze_video** for general video questions, or **analyze_image** to describe an image without the UI-review prompt.
 
-## Demo 4: observar cambios visuales en tiempo real
+**This MCP does not run Playwright or record the test itself.** You or your coding agent must produce the media file first.
 
-Esta modalidad necesita un backend diferente: el [servidor de referencia MOSS-VL-Realtime](https://github.com/OpenMOSS/MOSS-VL/blob/main/inference/realtime/README.md), lanzado por separado en una GPU. Por ejemplo, desde el repositorio de OpenMOSS:
+## Demo 4: watch visual changes in real time
+
+Realtime observation requires a **separate** [MOSS-VL-Realtime reference server](https://github.com/OpenMOSS/MOSS-VL/blob/main/inference/realtime/README.md) running on a suitable GPU. From the **OpenMOSS/MOSS-VL** repository, for example:
 
 ~~~bash
 CUDA_VISIBLE_DEVICES=0 python inference/realtime/run_online_inference.py \
   --serve --host 127.0.0.1 --port 8000
 ~~~
 
-Por defecto, el MCP conecta con **ws://127.0.0.1:8000/v1/realtime** (configurable mediante **MOSS_VL_REALTIME_URL**). **SGLang-Omni utiliza otro protocolo y no está soportado.**
+By default, the MCP connects to **ws://127.0.0.1:8000/v1/realtime**. Override this with **MOSS_VL_REALTIME_URL** in your MCP client configuration if needed. **SGLang-Omni uses a different protocol and is not supported by this integration.**
 
-La captura del escritorio **se realiza en el host que ejecuta el MCP**, no automáticamente en el ordenador remoto del usuario. Para habilitarla explícitamente:
+Screen capture records **the desktop of the machine hosting the MCP process**, not a remote user's screen. To opt in, install the optional dependencies:
 
 ~~~bash
 python -m pip install -e '.[screen]'
 ~~~
 
-Añade **--env MOSS_VL_ALLOW_SCREEN_CAPTURE=1** al comando de registro de Claude Code o Codex y reinicia el agente. La captura está desactivada por defecto porque puede incluir contenido sensible.
+Add **--env MOSS_VL_ALLOW_SCREEN_CAPTURE=1** to the Claude Code or Codex registration command, then restart the agent. Capture is disabled by default because the local screen may contain sensitive content.
 
-Mensaje de ejemplo para el agente:
+Example prompt for the agent:
 
-> Abre una sesión con **start_visual_session**. Observa el monitor 1 mediante **start_screen_observation** a 1 FPS durante 30 segundos. Usa **ask_visual_session** para preguntar si aparecen cambios inesperados, consulta **get_visual_events** usando el cursor **next_seq** y cierra tanto la observación como la sesión.
+> Create a session with **start_visual_session**. Use **start_screen_observation** to observe monitor 1 at 1 FPS for 30 seconds. Use **ask_visual_session** to ask about unexpected changes, poll **get_visual_events** using its **next_seq** cursor, and stop both the observation and session when finished.
 
-Los resultados se consultan por **polling**, sin notificaciones push automáticas. La captura está limitada a **2 FPS y 5 minutos** por petición. El backend de referencia admite una sola sesión por proceso del modelo.
+The agent must **poll** for results; there are no automatic push notifications. Screen capture is capped at **2 FPS and 5 minutes** per request. The reference realtime backend handles one active session per model process.
 
-## Todas las herramientas
+## Available MCP tools
 
-| Caso de uso | Herramientas MCP | Necesitas |
+| Use case | MCP tools | Requirements |
 | --- | --- | --- |
-| Diagnosticar la instalación | **check_moss_vl_setup** | Instalación base |
-| Imágenes y vídeos | **analyze_image**, **analyze_video** | Modelo offline |
-| QA visual | **inspect_ui**, **compare_ui_states**, **analyze_test_recording** | Modelo offline |
-| Sesiones realtime | **start_visual_session**, **push_visual_frame**, **ask_visual_session**, **get_visual_events**, **stop_visual_session** | Backend realtime |
-| Captura local | **start_screen_observation**, **get_screen_observation_status**, **stop_screen_observation** | Realtime + dependencia screen + consentimiento explícito |
-| Reproducir vídeo en el backend | **replay_visual_video**, **stop_visual_video** | Realtime + ruta compartida + **MOSS_VL_ALLOW_SERVER_VIDEO=1** |
+| Check local setup | **check_moss_vl_setup** | Base installation |
+| Understand images and videos | **analyze_image**, **analyze_video** | Offline model |
+| Visual QA | **inspect_ui**, **compare_ui_states**, **analyze_test_recording** | Offline model |
+| Realtime sessions | **start_visual_session**, **push_visual_frame**, **ask_visual_session**, **get_visual_events**, **stop_visual_session** | Realtime backend |
+| Capture the local screen | **start_screen_observation**, **get_screen_observation_status**, **stop_screen_observation** | Realtime backend + screen extra + explicit opt-in |
+| Replay video on the backend | **replay_visual_video**, **stop_visual_video** | Realtime backend + shared file path + **MOSS_VL_ALLOW_SERVER_VIDEO=1** |
 
-**MOSS_VL_MEDIA_ROOT** restringe los archivos locales accesibles por el MCP. Si habilitas replay remoto, **la misma ruta absoluta** de vídeo debe estar disponible tanto en el host MCP como en el del modelo.
+**MOSS_VL_MEDIA_ROOT** restricts which local files the MCP can read. Relative paths and symlinks that escape the allowed directory are rejected. For server-side realtime video replay, the **same absolute path** must be accessible on both the MCP host and the inference-server host.
 
-## Solución de problemas
+## Troubleshooting
 
-| Problema | Qué revisar |
+| Problem | What to check |
 | --- | --- |
-| No aparecen las herramientas | Ejecuta **claude mcp list** o **codex mcp list**, comprueba la ruta del ejecutable y reinicia el agente. |
-| Faltan dependencias | Ejecuta **check_moss_vl_setup**. El paquete base no incluye el backend offline ni la captura. |
-| Falla el análisis de una imagen | Verifica el checkpoint y las dependencias de OpenMOSS en el entorno GPU. El diagnóstico no valida la inferencia. |
-| Archivo fuera de la carpeta | Mueve el archivo dentro de **MOSS_VL_MEDIA_ROOT**. Se rechazan rutas y enlaces simbólicos que escapen de ella. |
-| No inicia realtime | Comprueba que el servidor de referencia esté activo y la variable **MOSS_VL_REALTIME_URL**. |
-| No aparecen eventos nuevos | Envía frames o inicia la captura, pregunta con **ask_visual_session** y consulta **get_visual_events** usando **next_seq**. |
-| No hay captura de pantalla | Instala **.[screen]**, habilita la función y concede permisos de pantalla al proceso. |
+| MCP tools are missing | Run **claude mcp list** or **codex mcp list**, check the absolute executable path, and restart the agent. |
+| Optional dependencies are missing | Call **check_moss_vl_setup**. The base install includes neither offline model dependencies nor screen-capture extras. |
+| Image analysis fails | Verify the upstream checkpoint and dependencies in the GPU environment. The setup check does not validate model inference. |
+| Media file is rejected | Move the file inside **MOSS_VL_MEDIA_ROOT**. Paths and symlinks that escape the directory are intentionally rejected. |
+| Realtime session will not start | Check that the reference server is running and **MOSS_VL_REALTIME_URL** points to it. |
+| No new realtime events appear | Send frames or start screen capture, ask a question via **ask_visual_session**, and poll **get_visual_events** using **next_seq**. |
+| Screen capture does not work | Install **.[screen]**, explicitly enable capture, and grant operating-system screen-recording permissions. |
 
-**Privacidad:** usa una carpeta pequeña para los archivos compartidos y evita enviar capturas con contraseñas o datos sensibles. No expongas el WebSocket de referencia públicamente sin TLS, autenticación y restricciones de red.
+**Privacy and security:** use a dedicated, narrowly scoped media directory. Do not share screenshots containing passwords or other secrets. Never expose the reference WebSocket service publicly without TLS, authentication, and network restrictions.
 
-## Desarrollo y créditos
+## Development and credits
 
 ~~~bash
 python -m pip install -e '.[dev]'
@@ -157,8 +161,8 @@ ruff check src tests
 pytest -q
 ~~~
 
-Las pruebas emplean backends simulados: **la inferencia GPU extremo a extremo sigue pendiente**.
+Tests use mocked backends. **End-to-end GPU inference validation is still pending.**
 
-Documentación adicional: [guía de agentes en inglés](docs/AGENT_USAGE.md) · [variables de entorno](.env.example) · [proyecto OpenMOSS](https://github.com/OpenMOSS/MOSS-VL).
+More resources: [detailed agent usage guide](docs/AGENT_USAGE.md) · [configuration example](.env.example) · [OpenMOSS project](https://github.com/OpenMOSS/MOSS-VL).
 
-Creado y mantenido por [@edujbarrios](https://github.com/edujbarrios). Proyecto **independiente y no oficial**; no afiliado ni respaldado por OpenMOSS. Los modelos y el trabajo de investigación pertenecen a sus respectivos autores. Revisa las licencias upstream antes de desplegar.
+Created and maintained by [@edujbarrios](https://github.com/edujbarrios). This is an **independent, unofficial community project**, not affiliated with or endorsed by OpenMOSS. The models and original research belong to their respective authors. Review upstream model and dependency licenses before deployment.

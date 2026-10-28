@@ -34,7 +34,7 @@ def create_server(
     settings = settings or Settings.from_env()
     offline = offline or OfflineVisionBackend(settings.offline_checkpoint)
     realtime = realtime or RealtimeSessionManager(
-        settings.realtime_url, settings.max_sessions
+        settings.realtime_url, settings.max_sessions, settings.max_frame_bytes
     )
     screen = ScreenObserver(realtime, enabled=settings.allow_screen_capture)
     mcp = MCPServer("moss-vl-mcp")

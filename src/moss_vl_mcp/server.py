@@ -4,6 +4,7 @@ from mcp.server import MCPServer
 
 from .capture import ScreenObserver
 from .config import Settings
+from .diagnostics import check_setup
 from .media import (
     IMAGE_SUFFIXES,
     STREAM_IMAGE_SUFFIXES,
@@ -38,6 +39,11 @@ def create_server(
     )
     screen = ScreenObserver(realtime, enabled=settings.allow_screen_capture)
     mcp = MCPServer("moss-vl-mcp")
+
+    @mcp.tool()
+    async def check_moss_vl_setup() -> dict:
+        """Inspect local prerequisites without loading a model or connecting to the GPU backend."""
+        return check_setup(settings)
 
     @mcp.tool()
     async def analyze_image(path: str, prompt: str = "Describe this image.") -> str:

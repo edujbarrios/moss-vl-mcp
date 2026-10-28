@@ -53,9 +53,15 @@ async def test_tools_available_and_image_workflow(tmp_path):
     async with Client(mcp, raise_exceptions=True) as client:
         catalog = await client.list_tools()
         names = {tool.name for tool in catalog.tools}
-        assert {"analyze_image", "analyze_video", "inspect_ui", "compare_ui_states",
+        assert {"check_moss_vl_setup", "analyze_image", "analyze_video",
+                "inspect_ui", "compare_ui_states",
                 "start_visual_session", "push_visual_frame", "ask_visual_session",
                 "get_visual_events", "stop_visual_session"}.issubset(names)
+
+        diagnostic = await client.call_tool("check_moss_vl_setup", {})
+        assert not diagnostic.is_error
+        assert "offline_python_modules_detected" in str(diagnostic.content)
+        assert offline.calls == []  # No model loading required for setup checks.
 
         result = await client.call_tool(
             "analyze_image", {"path": "screen.png", "prompt": "What is visible?"}

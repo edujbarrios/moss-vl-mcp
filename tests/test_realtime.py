@@ -66,3 +66,47 @@ async def test_reject_bad_ready(monkeypatch):
     with pytest.raises(RuntimeError, match="did not become ready"):
         await manager.start()
     assert socket.closed
+
+
+@pytest.mark.asyncio
+async def test_upstream_seq_does_not_break_event_cursor(monkeypatch):
+    socket = FakeWebSocket()
+    monkeypatch.setattr("moss_vl_mcp.realtime.websockets.connect", AsyncMock(return_value=socket))
+    manager = RealtimeSessionManager("ws://localhost:8000/v1/realtime")
+    sid = await manager.start()
+
+    # Only the MCP should set its pagination sequence; the upstream may send its own.
+    await socket.inbox.put('{"type":"output","seq":9000,"text":"Frame described"}')
+    await asyncio.sleep(0)
+
+    first = manager.events(sid, after_seq=0, limit=1)
+    assert first["latest_seq"] == 2
+    assert first["next_seq"] == 1
+    assert first["has_more"] is True
+    assert first["history_gap"] is False
+    second = manager.events(sid, after_seq=first["next_seq"])
+    assert second["events"][0]["seq"] == 2
+    assert second["events"][0]["text"] == "Frame described"
+    assert second["next_seq"] == 2
+    await manager.stop(sid)
+
+
+@pytest.mark.asyncio
+async def test_frame_guards_apply_to_all_realtime_producers(monkeypatch):
+    socket = FakeWebSocket()
+    monkeypatch.setattr("moss_vl_mcp.realtime.websockets.connect", AsyncMock(return_value=socket))
+    with pytest.raises(ValueError, match="max_frame_bytes"):
+        RealtimeSessionManager("ws://localhost:8000/v1/realtime", max_frame_bytes=0)
+
+    manager = RealtimeSessionManager("ws://localhost:8000/v1/realtime", max_frame_bytes=4)
+    sid = await manager.start()
+    with pytest.raises(ValueError, match="empty"):
+        await manager.push_frame(sid, b"", 0)
+    with pytest.raises(ValueError, match="maximum"):
+        await manager.push_frame(sid, b"12345", 0)
+    assert len(socket.sent) == 1  # Invalid inputs must not send metadata or bytes.
+
+    await manager.push_frame(sid, b"1234", 0)
+    assert json.loads(socket.sent[1]) == {"type": "frame", "timestamp": 0}
+    assert socket.sent[2] == b"1234"
+    await manager.stop(sid)

@@ -30,19 +30,24 @@ class RealtimeSession:
 
     def record(self, message: dict[str, Any]) -> None:
         self.seq += 1
-        self.events.append({"seq": self.seq, **message})
+        self.events.append({**message, "seq": self.seq})
 
 
 class RealtimeSessionManager:
     """Session Factory + Registry; each session owns one upstream WebSocket."""
 
-    def __init__(self, url: str, max_sessions: int = 1) -> None:
+    def __init__(
+        self, url: str, max_sessions: int = 1, max_frame_bytes: int = 20 * 1024 * 1024
+    ) -> None:
         if max_sessions < 1:
             raise ValueError("max_sessions must be positive")
+        if max_frame_bytes < 1:
+            raise ValueError("max_frame_bytes must be positive")
         if not url.startswith(("ws://", "wss://")):
             raise ValueError("Realtime URL must be a WebSocket URL")
         self.url = url
         self.max_sessions = max_sessions
+        self.max_frame_bytes = max_frame_bytes
         self._sessions: dict[str, RealtimeSession] = {}
         self._lock = asyncio.Lock()
 
@@ -125,6 +130,10 @@ class RealtimeSessionManager:
     ) -> None:
         if not math.isfinite(timestamp) or timestamp < 0:
             raise ValueError("timestamp must be a nonnegative finite number")
+        if not data:
+            raise ValueError("frame data must not be empty")
+        if len(data) > self.max_frame_bytes:
+            raise ValueError("frame exceeds configured maximum frame size")
         session = self._get(session_id)
         async with session.send_lock:
             if timestamp < session.last_timestamp:
